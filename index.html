@@ -4,7 +4,182 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>fluids-2d-playground</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      height: 100%;
+      background: #0a0a0c;
+      overflow: hidden;
+      font-family: system-ui, sans-serif;
+    }
+    #fluid {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+      touch-action: none;
+      cursor: crosshair;
+    }
+    #error {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      padding: 12px 16px;
+      background: #3a1212;
+      color: #fecaca;
+      font-size: 14px;
+      border-top: 1px solid #7f1d1d;
+    }
+    #error[hidden] { display: none; }
+
+    #controls {
+      position: fixed;
+      top: 12px;
+      right: 12px;
+      z-index: 10;
+      width: min(280px, calc(100vw - 24px));
+      max-height: min(520px, calc(100vh - 24px));
+      display: flex;
+      flex-direction: column;
+      background: rgba(18, 18, 22, 0.92);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 10px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+      backdrop-filter: blur(10px);
+      font-size: 12px;
+      color: #e4e4e7;
+    }
+    #controls summary {
+      list-style: none;
+      cursor: pointer;
+      padding: 10px 12px;
+      font-weight: 600;
+      font-size: 13px;
+      letter-spacing: 0.02em;
+      user-select: none;
+      border-radius: 10px 10px 0 0;
+    }
+    #controls summary::-webkit-details-marker { display: none; }
+    #controls summary::after {
+      content: "▾";
+      float: right;
+      opacity: 0.6;
+      font-size: 11px;
+    }
+    #controls:not([open]) summary { border-radius: 10px; }
+    #controls:not([open]) summary::after { content: "▸"; }
+
+    #controls-body {
+      padding: 0 12px 12px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .ctrl-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 6px 10px;
+      align-items: center;
+    }
+    .ctrl-row label {
+      grid-column: 1 / -1;
+      color: #a1a1aa;
+      font-size: 11px;
+    }
+    .ctrl-row input[type="range"] {
+      grid-column: 1;
+      width: 100%;
+      accent-color: #6366f1;
+    }
+    .ctrl-val {
+      font-variant-numeric: tabular-nums;
+      color: #fafafa;
+      min-width: 3.2em;
+      text-align: right;
+    }
+    #controls button#clear-fluid {
+      margin-top: 4px;
+      padding: 8px 10px;
+      border-radius: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      background: rgba(255, 255, 255, 0.06);
+      color: #e4e4e7;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    #controls button#clear-fluid:hover {
+      background: rgba(255, 255, 255, 0.1);
+    }
+  </style>
 </head>
 <body>
+  <canvas id="fluid"></canvas>
+
+  <details id="controls" open>
+    <summary>Settings</summary>
+    <div id="controls-body">
+      <div class="ctrl-row" data-key="simSize">
+        <label for="simSize">Simulation grid</label>
+        <input type="range" id="simSize" min="64" max="512" step="32" value="256" />
+        <span class="ctrl-val" id="simSize-val">256</span>
+      </div>
+      <div class="ctrl-row" data-key="pressureIterations">
+        <label for="pressureIterations">Pressure iterations</label>
+        <input type="range" id="pressureIterations" min="5" max="60" step="1" value="20" />
+        <span class="ctrl-val" id="pressureIterations-val">20</span>
+      </div>
+      <div class="ctrl-row" data-key="vorticityCurl">
+        <label for="vorticityCurl">Vorticity</label>
+        <input type="range" id="vorticityCurl" min="0" max="50" step="1" value="16" />
+        <span class="ctrl-val" id="vorticityCurl-val">16</span>
+      </div>
+      <div class="ctrl-row" data-key="velocityDissipation">
+        <label for="velocityDissipation">Velocity fade (1 = none)</label>
+        <input type="range" id="velocityDissipation" min="920" max="1000" step="1" value="994" />
+        <span class="ctrl-val" id="velocityDissipation-val">0.99</span>
+      </div>
+      <div class="ctrl-row" data-key="dyeDissipation">
+        <label for="dyeDissipation">Dye fade (1 = none)</label>
+        <input type="range" id="dyeDissipation" min="850" max="1000" step="1" value="950" />
+        <span class="ctrl-val" id="dyeDissipation-val">0.95</span>
+      </div>
+      <div class="ctrl-row" data-key="splatForce">
+        <label for="splatForce">Stroke force</label>
+        <input type="range" id="splatForce" min="100" max="5000" step="10" value="5000" />
+        <span class="ctrl-val" id="splatForce-val">5000</span>
+      </div>
+      <div class="ctrl-row" data-key="strokeSize">
+        <label for="strokeSize">Stroke size</label>
+        <input type="range" id="strokeSize" min="500" max="9000" step="50" value="500" />
+        <span class="ctrl-val" id="strokeSize-val">500</span>
+      </div>
+      <div class="ctrl-row" data-key="colorIntensity">
+        <label for="colorIntensity">Color intensity</label>
+        <input type="range" id="colorIntensity" min="50" max="600" step="5" value="450" />
+        <span class="ctrl-val" id="colorIntensity-val">4.5</span>
+      </div>
+      <div class="ctrl-row" data-key="bloomThreshold">
+        <label for="bloomThreshold">Bloom threshold</label>
+        <input type="range" id="bloomThreshold" min="0" max="90" step="1" value="90" />
+        <span class="ctrl-val" id="bloomThreshold-val">0.90</span>
+      </div>
+      <div class="ctrl-row" data-key="bloomSoftKnee">
+        <label for="bloomSoftKnee">Bloom soft knee</label>
+        <input type="range" id="bloomSoftKnee" min="0" max="100" step="1" value="100" />
+        <span class="ctrl-val" id="bloomSoftKnee-val">1.00</span>
+      </div>
+      <div class="ctrl-row" data-key="bloomIntensity">
+        <label for="bloomIntensity">Bloom intensity</label>
+        <input type="range" id="bloomIntensity" min="0" max="200" step="2" value="150" />
+        <span class="ctrl-val" id="bloomIntensity-val">1.50</span>
+      </div>
+      <button type="button" id="clear-fluid">Clear fluid</button>
+    </div>
+  </details>
+
+  <div id="error" hidden></div>
+  <script type="module" src="js/main.js"></script>
 </body>
 </html>
